@@ -194,4 +194,41 @@ app.get('/api/v1/analytics', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Smart CI/CD Cost Guard running on port ${PORT}`);
 });
-  
+ // GET API: Dashboard lo cost logs chupinchadaniki
+app.get('/api/costs', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('cost_logs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET API: Monthly Analytics & Total Spending Graph kosam
+app.get('/api/analytics', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('cost_logs')
+            .select('estimated_cost, created_at, repo_name');
+
+        if (error) throw error;
+
+        // Total spending calculation
+        const totalCost = data.reduce((sum, item) => sum + Number(item.estimated_cost || 0), 0);
+
+        res.json({
+            success: true,
+            total_runs: data.length,
+            total_cost: totalCost.toFixed(4),
+            logs: data
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
