@@ -1,0 +1,23 @@
+name: Cost Guard Telemetry
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  telemetry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Metrics
+        run: |
+          curl -i -X POST https://smart-ci-cd-cost-guard.onrender.com/api/v1/enterprise/costs \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${{ secrets.COST_GUARD_API_KEY }}" \
+            -d '{
+              "repo_name": "${{ github.repository }}",
+              "workflow_name": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "duration_seconds": 120,
+              "estimated_cost": 0.005
+            }'
+            
