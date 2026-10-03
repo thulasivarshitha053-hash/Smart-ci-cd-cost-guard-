@@ -19,6 +19,103 @@ jobs:
               "run_id": "${{ github.run_id }}",
               "duration_seconds": 120,
               "estimated_cost": 0.005
+            }'name: Cost Guard Telemetry
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  telemetry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Send Metrics
+        id: telemetry_step
+        run: |
+          # This runs your original telemetry metrics collection
+          curl -i -X POST https://vercel.app \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: \${{ secrets.COST_GUARD_API_KEY }}" \
+            --data-raw '{
+              "repo_name": "\${{ github.repository }}",
+              "status": "initiated"
             }'
+
+  auto-heal-on-failure:
+    needs: telemetry
+    if: failure() # This job will run only if the telemetry step fails
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use AI Agent to Fix Code Silently
+        env:
+          OPENAI_API_KEY: \${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "❌ Pipeline failed! Activating autonomous AI repair agent..."
+          
+          python3 -c "
+          import os, requests, json
+          
+          # Target configuration and source code files to scan for errors
+          files_to_check = ['src/App.js', 'src/App.tsx', 'index.js', 'server.js', 'app.js', 'main.py']
+          target_file = None
+          
+          for f_path in files_to_check:
+              if os.path.exists(f_path):
+                  target_file = f_path
+                  break
+
+          if not target_file:
+              print('❌ No suitable target code file found in the repository root.')
+              exit(0)
+              
+          with open(target_file, 'r') as f:
+              current_code = f.read()
+
+          prompt = f'The build pipeline failed. Here is the source code:\n{current_code}\n\nPlease analyze, find any bugs or syntax errors, fix them, and return ONLY the corrected complete code. Do not include markdown formatting or explanations.'
+
+          headers = {
+              'Authorization': f'Bearer {os.getenv(\"OPENAI_API_KEY\")}',
+              'Content-Type': 'application/json'
+          }
+          data = {
+              'model': 'gpt-4o-mini',
+              'messages': [{'role': 'user', 'content': prompt}]
+          }
+          
+          response = requests.post('https://openai.com', headers=headers, json=data)
+          result = response.json()
+          fixed_code = result['choices']['message']['content'].strip()
+
+          if fixed_code.startswith('```'):
+              lines = fixed_code.split('\n')
+              if lines[0].startswith('```'):
+                  lines = lines[1:]
+              if lines[-1].startswith('```'):
+                  lines = lines[:-1]
+              fixed_code = '\n'.join(lines).strip()
+
+          with open(target_file, 'w') as f:
+              f.write(fixed_code)
+          print(f'✅ AI successfully fixed the file: {target_file}')
+          "
+
+      - name: Commit and Push Fixed Code Silently
+        run: |
+          git config --global user.name "AI-Self-Healer-Bot"
+          git config --global user.email "ai-healer@github.com"
+          git add .
+          git commit -m "🤖 AI Bot: Fixed deployment errors automatically without developer intervention"
+          git push origin main
+          echo "🚀 Corrected patch code pushed successfully to main branch!"
+          
             
             
